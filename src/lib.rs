@@ -1,3 +1,4 @@
+use std::convert::TryFrom;
 use std::env;
 use std::fs::File;
 use std::fs::OpenOptions;
@@ -5,7 +6,8 @@ use std::io::prelude::*;
 use std::io::BufReader;
 use std::path::Path;
 
-#[derive(Default)]
+// Struct representing a canonical .WAV file
+#[derive(Default, Debug)]
 pub struct WavHandler {
     // Riff Chunk
     pub riff_header: [u8; 4],
@@ -23,24 +25,6 @@ pub struct WavHandler {
     // Data subchunk
     pub data_chunk: [u8; 4],
     pub data_size: u32,
-}
-
-impl WavHandler {
-    pub fn new<R: Read>(audio_file: R) -> Result<WavHandler, &'static str> {
-        let result: WavHandler = WavHandler::default(); // Unused for now. Will be populated by the file's details
-        let mut reader: BufReader<R> = BufReader::new(audio_file);
-        let mut line: [u8; 4] = [0; 4];
-        match reader.read_exact(&mut line) {
-            Ok(line) => line,
-            Err(_) => return Err("Problem reading into the buffer."),
-        }
-
-        for value in line.iter() {
-            println!("{}", *value as char);
-        }
-
-        Ok(result)
-    }
 }
 
 // Step 1: Open the file
@@ -68,9 +52,58 @@ pub fn open_file(mut args: env::Args) -> Result<File, &'static str> {
     Ok(audio_file)
 }
 
+// Step 2.0: Read each byteline
+pub fn get_next_byteline<R: Read>(reader: &mut BufReader<R>) -> Result<[u8; 4], &'static str> {
+    let mut line: [u8; 4] = [0; 4];
+    match reader.read_exact(&mut line) {
+        Ok(line) => line,
+        Err(_) => {
+            return Err("Problem reading into the buffer.");
+        }
+    }
+
+    Ok(line)
+}
+
+impl WavHandler {
+    // Step 2: Read the File
+    pub fn new<R: Read>(audio_file: R) -> Result<WavHandler, &'static str> {
+        let mut result: WavHandler = WavHandler::default(); // Unused for now. Will be populated by the file's details
+        let mut reader: BufReader<R> = BufReader::new(audio_file);
+
+        result.riff_header = get_next_byteline(&mut reader)?;
+        result.riff_chunk_size = u32::from_le_bytes(get_next_byteline(&mut reader)?);
+        result.wave_header = get_next_byteline(&mut reader)?;
+        result.fmt_header = get_next_byteline(&mut reader)?;
+        result.fmt_chunk_size = u32::from_le_bytes(get_next_byteline(&mut reader)?);
+
+        let line = get_next_byteline(&mut reader)?;
+        // Grab 2 slices from Line and convert them into u16
+        result.audio_format = u16::from_le_bytes(<[u8; 2]>::try_from(&line[0..2]).unwrap());
+        result.channel_amount = u16::from_le_bytes(<[u8; 2]>::try_from(&line[2..4]).unwrap());
+
+        result.sample_rate = u32::from_le_bytes(get_next_byteline(&mut reader)?);
+        result.byte_rate = u32::from_le_bytes(get_next_byteline(&mut reader)?);
+
+        // Again, we grab 2 slices from the next line
+        let line = get_next_byteline(&mut reader)?;
+        result.block_align = u16::from_le_bytes(<[u8; 2]>::try_from(&line[0..2]).unwrap());
+        result.bit_rate = u16::from_le_bytes(<[u8; 2]>::try_from(&line[2..4]).unwrap());
+
+        result.data_chunk = get_next_byteline(&mut reader)?;
+        result.data_size = u32::from_le_bytes(get_next_byteline(&mut reader)?);
+
+        Ok(result)
+    }
+
+    pub fn show(self) {
+        println!("{:#?}", self);
+    }
+}
+
 /*
     1- Open file - Done!
-    2- Read File - In progress
+    2- Read File - Done!
     3- Edit File
     4- Save new file
     5- Open several files

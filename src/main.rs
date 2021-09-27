@@ -16,5 +16,7 @@ fn main() {
         process::exit(1);
     });
 
+    wav_handler.show();
+
     println!("");
 }
