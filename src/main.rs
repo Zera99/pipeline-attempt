@@ -17,6 +17,12 @@ fn main() {
     });
 
     wav_handler.show();
+    // unsafe {
+    //     let mut new_handler: WavHandler = wav_handler.clone();
+    //     new_handler.change_channel_test();
+    //     new_handler.show();
+    //     lib::write_new_file(new_handler).unwrap();
+    // }
 
     println!("");
 }
