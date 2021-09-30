@@ -4,7 +4,6 @@ use std::process;
 
 mod lib;
 use lib::WavHandler;
-
 fn main() {
     let file: File = lib::open_file(env::args()).unwrap_or_else(|err| {
         eprintln!("Problem opening the file: {}", err);
@@ -17,12 +16,10 @@ fn main() {
     });
 
     wav_handler.show();
-    // unsafe {
-    //     let mut new_handler: WavHandler = wav_handler.clone();
-    //     new_handler.change_channel_test();
-    //     new_handler.show();
-    //     lib::write_new_file(new_handler).unwrap();
-    // }
+    let mut new_handler: WavHandler = wav_handler.clone();
+    new_handler.change_channel_test();
+    new_handler.show();
+    new_handler.write_new_file();
 
     println!("");
 }

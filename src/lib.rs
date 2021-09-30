@@ -31,6 +31,26 @@ pub struct WavHandler {
     pub data_size: u32,
     pub audio_data: Vec<u8>,
 }
+
+#[derive(Default)]
+struct ByteRepresentation {
+    riff_header: [u8; 4],
+    riff_chunk_size: [u8; 4],
+    wave_header: [u8; 4],
+    // fmt subchunk
+    fmt_header: [u8; 4],
+    fmt_chunk_size: [u8; 4],
+    audio_format: [u8; 2],
+    channel_amount: [u8; 2],
+    sample_rate: [u8; 4],
+    byte_rate: [u8; 4],
+    block_align: [u8; 2],
+    bit_rate: [u8; 2],
+    // Data subchunk
+    data_chunk: [u8; 4],
+    data_size: [u8; 4],
+    audio_data: Vec<u8>,
+}
 // Step 1: Open the file
 pub fn open_file(mut args: env::Args) -> Result<File, &'static str> {
     args.next(); // Skip the first one because it's the name of the program
@@ -113,8 +133,6 @@ impl WavHandler {
         result.data_chunk = get_next_byteline(&mut reader)?;
         result.data_size = u32::from_le_bytes(get_next_byteline(&mut reader)?);
 
-        result.show();
-
         // Step 2.4: Read the Audio data
         if result.data_size % DATA_CHUNK_SIZE as u32 != 0 {
             println!("Data size cannot be divided by Chunk Size");
@@ -140,36 +158,65 @@ impl WavHandler {
     }
 
     // Debug Function that I change depending on the current issue. Ignore it
-    pub fn show(&self) {
-        println!("{:#?}", *self);
-        println!("Data size should be: {}", self.data_size);
-        println!("Data size is: {}", self.audio_data.len());
+    pub fn show(&self) {}
+
+    pub fn write_new_file(&self) {
+        let bytes_repr = ByteRepresentation::convert_to_bytes(self);
+        ByteRepresentation::write_new_file(bytes_repr).unwrap();
     }
 }
 
-// Step 4.0: Convert anything into a byte slice. It's not going to work.
-// Leaving it here for now just in case it becomes useful later.
-// unsafe fn any_as_u8_slice<T: Sized>(p: &T) -> &[u8] {
-//     ::std::slice::from_raw_parts((p as *const T) as *const u8, ::std::mem::size_of::<T>())
-// }
+// Step 4.0: Convert WavHandler to it's proper byte representation to be written
+impl ByteRepresentation {
+    fn convert_to_bytes(wav_handler: &WavHandler) -> ByteRepresentation {
+        let mut byte_repr = ByteRepresentation::default();
+        byte_repr.riff_header = wav_handler.riff_header; // It's already a [u8], shouldn't need conversion
+        byte_repr.riff_chunk_size = wav_handler.riff_chunk_size.to_le_bytes();
+        byte_repr.wave_header = wav_handler.wave_header; // It's already a [u8], shouldn't need conversion
+        byte_repr.fmt_header = wav_handler.fmt_header; // It's already a [u8], shouldn't need conversion
+        byte_repr.fmt_chunk_size = wav_handler.fmt_chunk_size.to_le_bytes();
+        byte_repr.audio_format = wav_handler.audio_format.to_le_bytes();
+        byte_repr.channel_amount = wav_handler.channel_amount.to_le_bytes();
+        byte_repr.sample_rate = wav_handler.sample_rate.to_le_bytes();
+        byte_repr.byte_rate = wav_handler.byte_rate.to_le_bytes();
+        byte_repr.block_align = wav_handler.block_align.to_le_bytes();
+        byte_repr.bit_rate = wav_handler.bit_rate.to_le_bytes();
+        byte_repr.data_chunk = wav_handler.data_chunk; // It's already a [u8], shouldn't need conversion
+        byte_repr.data_size = wav_handler.data_size.to_le_bytes();
+        byte_repr.audio_data = wav_handler.audio_data.clone(); // Vec of u8s. Don't think I need to convert it to [u8; 4] chunks. Gonna try without it
 
-// Step 4.1: Save a new file - 75% working
-// The file saving itself does work perfectly. What does not work is the way we're reading the wav_handler
-// TODO: Need to figure out how to write the file in the correct way.
-// pub unsafe fn write_new_file(wav_handler: WavHandler) -> io::Result<()> {
-//     let buffer = File::create("files/copied.wav")?;
-//     let mut buffer = BufWriter::new(buffer);
+        byte_repr
+    }
 
-//     buffer.write_all(any_as_u8_slice(&wav_handler))?;
+    // Step 4.1: Save a new file
+    pub fn write_new_file(byte_repr: ByteRepresentation) -> io::Result<()> {
+        let buffer = File::create("files/copied.wav")?;
+        let mut buffer = BufWriter::new(buffer);
 
-//     Ok(())
-// }
+        buffer.write(&byte_repr.riff_header)?;
+        buffer.write(&byte_repr.riff_chunk_size)?;
+        buffer.write(&byte_repr.wave_header)?;
+        buffer.write(&byte_repr.fmt_header)?;
+        buffer.write(&byte_repr.fmt_chunk_size)?;
+        buffer.write(&byte_repr.audio_format)?;
+        buffer.write(&byte_repr.channel_amount)?;
+        buffer.write(&byte_repr.sample_rate)?;
+        buffer.write(&byte_repr.byte_rate)?;
+        buffer.write(&byte_repr.block_align)?;
+        buffer.write(&byte_repr.bit_rate)?;
+        buffer.write(&byte_repr.data_chunk)?;
+        buffer.write(&byte_repr.data_size)?;
+        buffer.write(&byte_repr.audio_data)?;
+
+        Ok(())
+    }
+}
 
 /*
     1- Open file - Done!
     2- Read File - Done!
     3- Edit File - 25% Done! Only able to edit the header
-    4- Save new file
+    4- Save new file - Done!
     5- Open several files
     6- Process with Threads
     7- Save new files
